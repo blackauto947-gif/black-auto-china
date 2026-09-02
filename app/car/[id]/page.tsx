@@ -1,387 +1,206 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { notFound } from "next/navigation";
+
+type PageProps = {
+  params: Promise<{
+    id: string;
+  }>;
+};
 
 type Car = {
   id: string;
-  brand: string;
-  model: string;
+  name: string;
   year: number;
-  mileage: number;
-  power: number;
-  engine: string;
-  transmission: string;
-  drive: string;
-  body_type: string;
-  color: string;
-  price_cny: number;
-  price_rub: number;
-  description_ru: string;
+  mileage: string;
+  price: number;
+  images: string[];
+  engine?: string;
+  transmission?: string;
+  drive?: string;
+  body?: string;
+  color?: string;
 };
 
-type CarImage = {
-  id: string;
-  image_url: string;
-  position: number;
-};
+const cars: Car[] = [
+  {
+    id: "honda-vezel",
+    name: "Honda Vezel",
+    year: 2026,
+    mileage: "0 км",
+    price: 330000,
+    images: [
+      "https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6?auto=format&fit=crop&w=1600&q=85",
+      "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1600&q=85",
+      "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1600&q=85",
+    ],
+    engine: "1.5 л",
+    transmission: "Автомат",
+    drive: "Передний",
+    body: "Кроссовер",
+    color: "Белый",
+  },
 
-export default function CarPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const s = supabase();
+  {
+    id: "audi-q3",
+    name: "Audi Q3",
+    year: 2026,
+    mileage: "0 км",
+    price: 4150000,
+    images: [
+      "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1600&q=85",
+      "https://images.unsplash.com/photo-1542282088-72c9c27ed0cd?auto=format&fit=crop&w=1600&q=85",
+      "https://images.unsplash.com/photo-1494905998402-395d579af36f?auto=format&fit=crop&w=1600&q=85",
+    ],
+    engine: "2.0 л",
+    transmission: "Автомат",
+    drive: "Полный",
+    body: "Кроссовер",
+    color: "Черный",
+  },
 
-  const [carId, setCarId] = useState<string | null>(null);
+  {
+    id: "audi-q5",
+    name: "Audi Q5",
+    year: 2026,
+    mileage: "0 км",
+    price: 5200000,
+    images: [
+      "https://images.unsplash.com/photo-1609521263047-f8f205293f24?auto=format&fit=crop&w=1600&q=85",
+      "https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?auto=format&fit=crop&w=1600&q=85",
+      "https://images.unsplash.com/photo-1603584173870-7f23fdae1b7a?auto=format&fit=crop&w=1600&q=85",
+    ],
+    engine: "2.0 л",
+    transmission: "Автомат",
+    drive: "Полный",
+    body: "Кроссовер",
+    color: "Серый",
+  },
+];
 
-  const [car, setCar] = useState<Car | null>(
-    null
-  );
+function formatPrice(price: number) {
+  return new Intl.NumberFormat("ru-RU").format(price);
+}
 
-  const [images, setImages] = useState<
-    CarImage[]
-  >([]);
+export default async function CarPage({ params }: PageProps) {
+  const { id } = await params;
 
-  const [activeImage, setActiveImage] =
-    useState(0);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  useEffect(() => {
-    async function getParams() {
-      const resolvedParams = await params;
-
-      setCarId(resolvedParams.id);
-    }
-
-    getParams();
-  }, [params]);
-
-  useEffect(() => {
-    if (!carId) return;
-
-    async function loadCar() {
-      setLoading(true);
-
-      const carResult = await s
-        .from("cars")
-        .select("*")
-        .eq("id", carId)
-        .single();
-
-      if (
-        carResult.error ||
-        !carResult.data
-      ) {
-        setCar(null);
-        setLoading(false);
-        return;
-      }
-
-      setCar(carResult.data);
-
-      const imagesResult = await s
-        .from("car_images")
-        .select("*")
-        .eq("car_id", carId)
-        .order("position", {
-          ascending: true,
-        });
-
-      if (imagesResult.error) {
-        console.error(
-          imagesResult.error
-        );
-      }
-
-      setImages(
-        imagesResult.data || []
-      );
-
-      setActiveImage(0);
-
-      setLoading(false);
-    }
-
-    loadCar();
-  }, [carId]);
-
-  if (loading) {
-    return (
-      <main className="wrap car-page">
-        <p>
-          Загрузка автомобиля...
-        </p>
-      </main>
-    );
-  }
+  const car = cars.find((item) => item.id === id);
 
   if (!car) {
-    return (
-      <main className="wrap car-page">
+    notFound();
+  }
 
-        <h1>
-          Автомобиль не найден
-        </h1>
-
-        <Link
-          href="/"
-          className="back-link"
-        >
+  return (
+    <main className="car-page">
+      <div className="car-container">
+        <Link href="/" className="back-link">
           ← Вернуться в каталог
         </Link>
 
-      </main>
-    );
-  }
+        <div className="car-header">
+          <div>
+            <p className="car-label">АВТОМОБИЛЬ В НАЛИЧИИ</p>
 
-  const specs = [
-    {
-      label: "Год выпуска",
-      value: car.year || "Не указано",
-    },
-    {
-      label: "Пробег",
-      value: car.mileage
-        ? `${Number(
-            car.mileage
-          ).toLocaleString("ru-RU")} км`
-        : "Не указано",
-    },
-    {
-      label: "Мощность",
-      value: car.power
-        ? `${car.power} л.с.`
-        : "Не указано",
-    },
-    {
-      label: "Двигатель",
-      value:
-        car.engine || "Не указано",
-    },
-    {
-      label: "Коробка передач",
-      value:
-        car.transmission ||
-        "Не указано",
-    },
-    {
-      label: "Привод",
-      value:
-        car.drive ||
-        "Не указано",
-    },
-    {
-      label: "Тип кузова",
-      value:
-        car.body_type ||
-        "Не указано",
-    },
-    {
-      label: "Цвет",
-      value:
-        car.color ||
-        "Не указано",
-    },
-  ];
+            <h1>{car.name}</h1>
 
-  return (
-    <main className="wrap car-page">
-
-      <Link
-        href="/"
-        className="back-link"
-      >
-        ← Назад в каталог
-      </Link>
-
-      <h1 className="car-title">
-        {car.brand} {car.model}
-      </h1>
-
-      <p className="car-subtitle">
-        {car.year} •{" "}
-
-        {car.mileage
-          ? `${Number(
-              car.mileage
-            ).toLocaleString(
-              "ru-RU"
-            )} км`
-          : "Пробег не указан"}
-      </p>
-
-      <section className="car-gallery">
-
-        <div className="main-image">
-
-          {images.length > 0 ? (
-
-            <img
-              src={
-                images[
-                  activeImage
-                ]?.image_url
-              }
-              alt={`${car.brand} ${car.model}`}
-            />
-
-          ) : (
-
-            <div className="no-image">
-              Фотографии отсутствуют
+            <div className="car-meta">
+              {car.year} · {car.mileage}
             </div>
-
-          )}
-
-        </div>
-
-        {images.length > 1 && (
-
-          <div className="thumbnails">
-
-            {images.map(
-              (image, index) => (
-
-                <button
-                  key={image.id}
-                  type="button"
-                  className={
-                    index === activeImage
-                      ? "thumbnail active"
-                      : "thumbnail"
-                  }
-                  onClick={() =>
-                    setActiveImage(index)
-                  }
-                >
-
-                  <img
-                    src={
-                      image.image_url
-                    }
-                    alt={`${car.brand} ${index + 1}`}
-                  />
-
-                </button>
-
-              )
-            )}
-
           </div>
 
-        )}
+          <div className="car-price-box">
+            <span>Стоимость</span>
 
-      </section>
+            <strong>
+              {formatPrice(car.price)} ₽
+            </strong>
+          </div>
+        </div>
 
-      <section className="car-info-grid">
+        <section className="car-gallery">
+          <div className="main-photo">
+            <img
+              src={car.images[0]}
+              alt={car.name}
+            />
+          </div>
 
-        <div>
+          <div className="gallery-grid">
+            {car.images.slice(1).map((image, index) => (
+              <div
+                className="gallery-photo"
+                key={image}
+              >
+                <img
+                  src={image}
+                  alt={`${car.name} фото ${index + 2}`}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
 
-          <div className="car-details">
+        <section className="car-content">
+          <div className="specifications">
+            <h2>Характеристики</h2>
+
+            <div className="spec-grid">
+              <div className="spec-item">
+                <span>Год выпуска</span>
+                <strong>{car.year}</strong>
+              </div>
+
+              <div className="spec-item">
+                <span>Пробег</span>
+                <strong>{car.mileage}</strong>
+              </div>
+
+              <div className="spec-item">
+                <span>Двигатель</span>
+                <strong>{car.engine || "Не указано"}</strong>
+              </div>
+
+              <div className="spec-item">
+                <span>Коробка передач</span>
+                <strong>
+                  {car.transmission || "Не указано"}
+                </strong>
+              </div>
+
+              <div className="spec-item">
+                <span>Привод</span>
+                <strong>{car.drive || "Не указано"}</strong>
+              </div>
+
+              <div className="spec-item">
+                <span>Тип кузова</span>
+                <strong>{car.body || "Не указано"}</strong>
+              </div>
+
+              <div className="spec-item">
+                <span>Цвет</span>
+                <strong>{car.color || "Не указано"}</strong>
+              </div>
+            </div>
+          </div>
+
+          <aside className="request-card">
+            <p>Цена автомобиля</p>
 
             <h2>
-              Характеристики
+              {formatPrice(car.price)} ₽
             </h2>
 
-            <div className="specs">
+            <button>
+              Оставить заявку
+            </button>
 
-              {specs.map(
-                (spec) => (
-
-                  <div
-                    className="spec"
-                    key={spec.label}
-                  >
-
-                    <div className="spec-label">
-                      {spec.label}
-                    </div>
-
-                    <div className="spec-value">
-                      {spec.value}
-                    </div>
-
-                  </div>
-
-                )
-              )}
-
-            </div>
-
-          </div>
-
-          {car.description_ru && (
-
-            <div className="car-details description">
-
-              <h2>
-                Описание
-              </h2>
-
-              <p>
-                {car.description_ru}
-              </p>
-
-            </div>
-
-          )}
-
-        </div>
-
-        <aside className="price-card">
-
-          <div className="price-label">
-            Цена автомобиля
-          </div>
-
-          <div className="price">
-
-            {Number(
-              car.price_rub
-            ).toLocaleString(
-              "ru-RU"
-            )} ₽
-
-          </div>
-
-          {Number(
-            car.price_cny
-          ) > 0 && (
-
-            <p className="cny-price">
-
-              Цена в Китае:{" "}
-
-              {Number(
-                car.price_cny
-              ).toLocaleString(
-                "ru-RU"
-              )} ¥
-
-            </p>
-
-          )}
-
-          <button
-            className="buy-button"
-            type="button"
-            onClick={() => {
-              alert(
-                "Оставьте заявку, и мы свяжемся с вами."
-              );
-            }}
-          >
-            Оставить заявку
-          </button>
-
-        </aside>
-
-      </section>
-
+            <span>
+              Менеджер свяжется с вами для уточнения деталей
+            </span>
+          </aside>
+        </section>
+      </div>
     </main>
   );
 }
