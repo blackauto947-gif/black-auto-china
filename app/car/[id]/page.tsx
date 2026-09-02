@@ -30,26 +30,52 @@ type CarImage = {
 export default function CarPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
   const s = supabase();
 
-  const [car, setCar] = useState<Car | null>(null);
-  const [images, setImages] = useState<CarImage[]>([]);
-  const [activeImage, setActiveImage] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [carId, setCarId] = useState<string | null>(null);
+
+  const [car, setCar] = useState<Car | null>(
+    null
+  );
+
+  const [images, setImages] = useState<
+    CarImage[]
+  >([]);
+
+  const [activeImage, setActiveImage] =
+    useState(0);
+
+  const [loading, setLoading] =
+    useState(true);
 
   useEffect(() => {
+    async function getParams() {
+      const resolvedParams = await params;
+
+      setCarId(resolvedParams.id);
+    }
+
+    getParams();
+  }, [params]);
+
+  useEffect(() => {
+    if (!carId) return;
+
     async function loadCar() {
       setLoading(true);
 
       const carResult = await s
         .from("cars")
         .select("*")
-        .eq("id", params.id)
+        .eq("id", carId)
         .single();
 
-      if (carResult.error || !carResult.data) {
+      if (
+        carResult.error ||
+        !carResult.data
+      ) {
         setCar(null);
         setLoading(false);
         return;
@@ -60,23 +86,35 @@ export default function CarPage({
       const imagesResult = await s
         .from("car_images")
         .select("*")
-        .eq("car_id", params.id)
+        .eq("car_id", carId)
         .order("position", {
           ascending: true,
         });
 
-      setImages(imagesResult.data || []);
+      if (imagesResult.error) {
+        console.error(
+          imagesResult.error
+        );
+      }
+
+      setImages(
+        imagesResult.data || []
+      );
+
+      setActiveImage(0);
 
       setLoading(false);
     }
 
     loadCar();
-  }, [params.id]);
+  }, [carId]);
 
   if (loading) {
     return (
       <main className="wrap car-page">
-        <p>Загрузка автомобиля...</p>
+        <p>
+          Загрузка автомобиля...
+        </p>
       </main>
     );
   }
@@ -84,7 +122,10 @@ export default function CarPage({
   if (!car) {
     return (
       <main className="wrap car-page">
-        <h1>Автомобиль не найден</h1>
+
+        <h1>
+          Автомобиль не найден
+        </h1>
 
         <Link
           href="/"
@@ -92,6 +133,7 @@ export default function CarPage({
         >
           ← Вернуться в каталог
         </Link>
+
       </main>
     );
   }
@@ -104,7 +146,9 @@ export default function CarPage({
     {
       label: "Пробег",
       value: car.mileage
-        ? `${car.mileage.toLocaleString()} км`
+        ? `${Number(
+            car.mileage
+          ).toLocaleString("ru-RU")} км`
         : "Не указано",
     },
     {
@@ -115,7 +159,8 @@ export default function CarPage({
     },
     {
       label: "Двигатель",
-      value: car.engine || "Не указано",
+      value:
+        car.engine || "Не указано",
     },
     {
       label: "Коробка передач",
@@ -125,7 +170,9 @@ export default function CarPage({
     },
     {
       label: "Привод",
-      value: car.drive || "Не указано",
+      value:
+        car.drive ||
+        "Не указано",
     },
     {
       label: "Тип кузова",
@@ -135,7 +182,9 @@ export default function CarPage({
     },
     {
       label: "Цвет",
-      value: car.color || "Не указано",
+      value:
+        car.color ||
+        "Не указано",
     },
   ];
 
@@ -155,8 +204,13 @@ export default function CarPage({
 
       <p className="car-subtitle">
         {car.year} •{" "}
+
         {car.mileage
-          ? `${car.mileage.toLocaleString()} км`
+          ? `${Number(
+              car.mileage
+            ).toLocaleString(
+              "ru-RU"
+            )} км`
           : "Пробег не указан"}
       </p>
 
@@ -177,15 +231,7 @@ export default function CarPage({
 
           ) : (
 
-            <div
-              style={{
-                height: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#888",
-              }}
-            >
+            <div className="no-image">
               Фотографии отсутствуют
             </div>
 
@@ -243,24 +289,26 @@ export default function CarPage({
 
             <div className="specs">
 
-              {specs.map((spec) => (
+              {specs.map(
+                (spec) => (
 
-                <div
-                  className="spec"
-                  key={spec.label}
-                >
+                  <div
+                    className="spec"
+                    key={spec.label}
+                  >
 
-                  <div className="spec-label">
-                    {spec.label}
+                    <div className="spec-label">
+                      {spec.label}
+                    </div>
+
+                    <div className="spec-value">
+                      {spec.value}
+                    </div>
+
                   </div>
 
-                  <div className="spec-value">
-                    {spec.value}
-                  </div>
-
-                </div>
-
-              ))}
+                )
+              )}
 
             </div>
 
@@ -294,18 +342,17 @@ export default function CarPage({
 
             {Number(
               car.price_rub
-            ).toLocaleString("ru-RU")} ₽
+            ).toLocaleString(
+              "ru-RU"
+            )} ₽
 
           </div>
 
-          {car.price_cny > 0 && (
+          {Number(
+            car.price_cny
+          ) > 0 && (
 
-            <p
-              style={{
-                color: "#999",
-                marginBottom: "25px",
-              }}
-            >
+            <p className="cny-price">
 
               Цена в Китае:{" "}
 
