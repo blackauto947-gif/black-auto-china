@@ -1,0 +1,3 @@
+import "./globals.css"; import Link from "next/link";
+export const metadata={title:"BLACK AUTO CHINA",description:"Автомобили из Китая"};
+export default function Layout({children}:{children:React.ReactNode}){return <html lang="ru"><body><header><Link href="/" className="logo">BLACK <span>AUTO</span> CHINA</Link><nav><Link href="/">Каталог</Link><Link href="/login">Админ-панель</Link></nav></header>{children}<footer>© BLACK AUTO CHINA</footer></body></html>}
