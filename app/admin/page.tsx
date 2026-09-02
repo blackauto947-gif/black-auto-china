@@ -31,6 +31,7 @@ export default function AdminPage() {
   const [files, setFiles] = useState<FileList | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [importing, setImporting] = useState(false);
 
   function updateField(key: string, value: any) {
     setForm((current: any) => ({
@@ -83,6 +84,52 @@ export default function AdminPage() {
     checkAdmin();
   }, []);
 
+  async function uploadCarImages(
+    carId: string,
+    imageFiles: File[]
+  ) {
+    for (let i = 0; i < imageFiles.length; i++) {
+      const file = imageFiles[i];
+
+      const safeName = file.name.replace(
+        /[^a-zA-Z0-9._-]/g,
+        "_"
+      );
+
+      const path =
+        `${carId}/${Date.now()}-${i}-${safeName}`;
+
+      const uploadResult = await s.storage
+        .from("car-images")
+        .upload(path, file);
+
+      if (uploadResult.error) {
+        throw new Error(
+          `Ошибка загрузки ${file.name}: ${uploadResult.error.message}`
+        );
+      }
+
+      const publicUrl = s.storage
+        .from("car-images")
+        .getPublicUrl(path)
+        .data.publicUrl;
+
+      const imageResult = await s
+        .from("car_images")
+        .insert({
+          car_id: carId,
+          image_url: publicUrl,
+          position: i,
+        });
+
+      if (imageResult.error) {
+        throw new Error(
+          `Ошибка сохранения фотографии: ${imageResult.error.message}`
+        );
+      }
+    }
+  }
+
   async function saveCar(event: React.FormEvent) {
     event.preventDefault();
 
@@ -101,7 +148,8 @@ export default function AdminPage() {
       transport_cny: Number(settings.transport_cny),
 
       price_rub: Math.round(
-        (Number(form.price_cny) + Number(settings.transport_cny)) *
+        (Number(form.price_cny) +
+          Number(settings.transport_cny)) *
           Number(settings.cny_rub_rate)
       ),
     };
@@ -133,44 +181,231 @@ export default function AdminPage() {
       carId = result.data.id;
     }
 
-    if (files && carId) {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-
-        const path =
-          `${carId}/${Date.now()}-${i}-${file.name}`;
-
-        const uploadResult = await s.storage
-          .from("car-images")
-          .upload(path, file);
-
-        if (uploadResult.error) {
-          setMessage(uploadResult.error.message);
-          return;
-        }
-
-        const publicUrl = s.storage
-          .from("car-images")
-          .getPublicUrl(path)
-          .data.publicUrl;
-
-        await s
-          .from("car_images")
-          .insert({
-            car_id: carId,
-            image_url: publicUrl,
-            position: i,
-          });
+    try {
+      if (files && carId) {
+        await uploadCarImages(
+          carId,
+          Array.from(files)
+        );
       }
+
+      setMessage("Автомобиль успешно сохранён");
+
+      setForm(emptyCar);
+      setEditId(null);
+      setFiles(null);
+
+      await loadData();
+    } catch (error: any) {
+      setMessage(
+        error.message || "Ошибка загрузки фотографий"
+      );
+    }
+  }
+
+  function getCarNameFromFolder(
+    folderName: string
+  ) {
+    const cleaned = folderName
+      .replace(/^\d+\s*/, "")
+      .trim();
+
+    const parts = cleaned.split(/\s+/);
+
+    const knownBrands = [
+      "BMW",
+      "Volkswagen",
+      "Toyota",
+      "Honda",
+      "Audi",
+      "Mercedes",
+      "Mercedes-Benz",
+      "Hyundai",
+      "Kia",
+      "Nissan",
+      "Mazda",
+      "Lexus",
+      "Ford",
+      "Chevrolet",
+      "Chery",
+      "Geely",
+      "Haval",
+      "BYD",
+      "Zeekr",
+      "Li",
+      "Tank",
+    ];
+
+    const firstWord = parts[0]?.toLowerCase();
+
+    const brand = knownBrands.find(
+      (item) =>
+        item.toLowerCase() === firstWord
+    );
+
+    if (brand) {
+      return {
+        brand,
+        model: parts.slice(1).join(" "),
+      };
     }
 
-    setMessage("Автомобиль успешно сохранён");
+    return {
+      brand: "",
+      model: cleaned,
+    };
+  }
 
-    setForm(emptyCar);
-    setEditId(null);
-    setFiles(null);
+  async function importFolder(
+    event: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const selectedFiles = event.target.files;
 
-    await loadData();
+    if (!selectedFiles || selectedFiles.length === 0) {
+      return;
+    }
+
+    if (!settings) {
+      setMessage("Сначала дождитесь загрузки настроек");
+      return;
+    }
+
+    setImporting(true);
+
+    try {
+      const filesArray = Array.from(selectedFiles);
+
+      const imageFiles = filesArray.filter(
+        (file) =>
+          file.type.startsWith("image/")
+      );
+
+      if (imageFiles.length === 0) {
+        throw new Error(
+          "В выбранной папке не найдено фотографий"
+        );
+      }
+
+      const folders = new Map<
+        string,
+        File[]
+      >();
+
+      for (const file of imageFiles) {
+        const path =
+          file.webkitRelativePath ||
+          file.name;
+
+        const pathParts = path.split("/");
+
+        if (pathParts.length < 3) {
+          continue;
+        }
+
+        const carFolder =
+          pathParts[pathParts.length - 2];
+
+        if (!folders.has(carFolder)) {
+          folders.set(carFolder, []);
+        }
+
+        folders
+          .get(carFolder)!
+          .push(file);
+      }
+
+      if (folders.size === 0) {
+        throw new Error(
+          "Не удалось найти папки автомобилей. Выберите главную папку «Сток 3»."
+        );
+      }
+
+      let importedCount = 0;
+
+      for (const [
+        folderName,
+        carImages,
+      ] of folders.entries()) {
+
+        setMessage(
+          `Импорт: ${folderName} (${importedCount + 1}/${folders.size})`
+        );
+
+        const carName =
+          getCarNameFromFolder(folderName);
+
+        const payload = {
+          ...emptyCar,
+
+          brand:
+            carName.brand ||
+            "Не указано",
+
+          model:
+            carName.model ||
+            folderName,
+
+          year:
+            new Date().getFullYear(),
+
+          transport_cny:
+            Number(
+              settings.transport_cny
+            ),
+
+          price_rub: Math.round(
+            Number(
+              settings.transport_cny
+            ) *
+              Number(
+                settings.cny_rub_rate
+              )
+          ),
+        };
+
+        const insertResult = await s
+          .from("cars")
+          .insert(payload)
+          .select()
+          .single();
+
+        if (insertResult.error) {
+          throw new Error(
+            `Ошибка создания ${folderName}: ${insertResult.error.message}`
+          );
+        }
+
+        const carId =
+          insertResult.data.id;
+
+        await uploadCarImages(
+          carId,
+          carImages
+        );
+
+        importedCount++;
+      }
+
+      setMessage(
+        `Готово! Импортировано автомобилей: ${importedCount}`
+      );
+
+      await loadData();
+
+    } catch (error: any) {
+
+      setMessage(
+        error.message ||
+          "Ошибка импорта"
+      );
+
+    } finally {
+
+      setImporting(false);
+
+      event.target.value = "";
+
+    }
   }
 
   async function saveSettings() {
@@ -179,8 +414,12 @@ export default function AdminPage() {
     const result = await s
       .from("settings")
       .update({
-        cny_rub_rate: Number(settings.cny_rub_rate),
-        transport_cny: Number(settings.transport_cny),
+        cny_rub_rate: Number(
+          settings.cny_rub_rate
+        ),
+        transport_cny: Number(
+          settings.transport_cny
+        ),
       })
       .eq("id", 1);
 
@@ -189,7 +428,9 @@ export default function AdminPage() {
       return;
     }
 
-    setMessage("Настройки успешно сохранены");
+    setMessage(
+      "Настройки успешно сохранены"
+    );
   }
 
   async function deleteCar(id: string) {
@@ -248,8 +489,13 @@ export default function AdminPage() {
 
       <div className="top">
         <div>
-          <p>УПРАВЛЕНИЕ КАТАЛОГОМ</p>
-          <h1>Админ-панель</h1>
+          <p>
+            УПРАВЛЕНИЕ КАТАЛОГОМ
+          </p>
+
+          <h1>
+            Админ-панель
+          </h1>
         </div>
 
         <button onClick={logout}>
@@ -259,31 +505,75 @@ export default function AdminPage() {
 
       <section className="panel">
 
-        <h2>Курс и доставка</h2>
+        <h2>
+          Импорт автомобилей
+        </h2>
+
+        <p>
+          Выберите главную папку
+          «Сток 3».
+          Каждый вложенный каталог
+          будет создан как отдельный
+          автомобиль.
+        </p>
+
+        <label
+          className="importButton"
+        >
+          {importing
+            ? "Импортируем..."
+            : "📁 Выбрать папку с автомобилями"}
+
+          <input
+            type="file"
+            multiple
+            // @ts-ignore
+            webkitdirectory=""
+            directory=""
+            onChange={importFolder}
+            disabled={importing}
+          />
+        </label>
+
+      </section>
+
+      <section className="panel">
+
+        <h2>
+          Курс и доставка
+        </h2>
 
         <input
-          value={settings?.cny_rub_rate || ""}
+          value={
+            settings?.cny_rub_rate || ""
+          }
           onChange={(event) =>
             setSettings({
               ...settings,
-              cny_rub_rate: event.target.value,
+              cny_rub_rate:
+                event.target.value,
             })
           }
           placeholder="Курс CNY / RUB"
         />
 
         <input
-          value={settings?.transport_cny || ""}
+          value={
+            settings?.transport_cny || ""
+          }
           onChange={(event) =>
             setSettings({
               ...settings,
-              transport_cny: event.target.value,
+              transport_cny:
+                event.target.value,
             })
           }
           placeholder="Доставка CNY"
         />
 
-        <button onClick={saveSettings}>
+        <button
+          onClick={saveSettings}
+        >
           Сохранить настройки
         </button>
 
@@ -303,12 +593,15 @@ export default function AdminPage() {
         >
 
           {fields.map((field) => (
+
             <label key={field}>
 
               {field}
 
               <input
-                value={form[field] ?? ""}
+                value={
+                  form[field] ?? ""
+                }
                 onChange={(event) =>
                   updateField(
                     field,
@@ -324,6 +617,7 @@ export default function AdminPage() {
               />
 
             </label>
+
           ))}
 
           <label className="wide">
@@ -331,7 +625,9 @@ export default function AdminPage() {
             Описание на русском языке
 
             <textarea
-              value={form.description_ru}
+              value={
+                form.description_ru
+              }
               onChange={(event) =>
                 updateField(
                   "description_ru",
@@ -351,7 +647,9 @@ export default function AdminPage() {
               accept="image/*"
               multiple
               onChange={(event) =>
-                setFiles(event.target.files)
+                setFiles(
+                  event.target.files
+                )
               }
             />
 
@@ -361,7 +659,9 @@ export default function AdminPage() {
 
             <input
               type="checkbox"
-              checked={form.is_published}
+              checked={
+                form.is_published
+              }
               onChange={(event) =>
                 updateField(
                   "is_published",
@@ -388,7 +688,9 @@ export default function AdminPage() {
 
       <section className="panel">
 
-        <h2>Автомобили</h2>
+        <h2>
+          Автомобили
+        </h2>
 
         {cars.length === 0 && (
           <p>
@@ -446,9 +748,11 @@ export default function AdminPage() {
       </section>
 
       {message && (
+
         <div className="toast">
           {message}
         </div>
+
       )}
 
     </main>
