@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
 import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "BLACK AUTO CHINA",
+  description: "Автомобили из Китая",
+};
 
 export default function RootLayout({
   children,
