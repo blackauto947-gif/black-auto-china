@@ -1,290 +1,131 @@
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
 
-export const dynamic = "force-dynamic";
+const cars = [
+  {
+    id: "honda-vezel",
+    name: "Honda Vezel",
+    year: "2026",
+    mileage: "0 км",
+    price: "330 000",
+    image:
+      "https://images.unsplash.com/photo-1542282088-72c9c27ed0cd?auto=format&fit=crop&w=1200&q=80",
+    photos: 16,
+  },
+  {
+    id: "audi-q3",
+    name: "Audi Q3",
+    year: "2026",
+    mileage: "0 км",
+    price: "4 150 000",
+    image:
+      "https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6?auto=format&fit=crop&w=1200&q=80",
+    photos: 22,
+  },
+  {
+    id: "audi-q5",
+    name: "Audi Q5",
+    year: "2026",
+    mileage: "0 км",
+    price: "5 200 000",
+    image:
+      "https://images.unsplash.com/photo-1609521263047-f8f205293f24?auto=format&fit=crop&w=1200&q=80",
+    photos: 21,
+  },
+];
 
-function formatPrice(price: number | null) {
-  if (!price) return "Цена по запросу";
-
-  return new Intl.NumberFormat("ru-RU").format(price) + " ₽";
-}
-
-export default async function HomePage() {
-  const s = supabase();
-
-  const { data: cars, error } = await s
-    .from("cars")
-    .select(`
-      *,
-      car_images (
-        id,
-        image_url,
-        position
-      )
-    `)
-    .eq("is_published", true)
-    .order("created_at", {
-      ascending: false,
-    });
-
-  if (error) {
-    console.error(error);
-  }
-
-  const carList = cars || [];
-
+export default function HomePage() {
   return (
-    <main className="home">
-      {/* HERO */}
-
+    <main>
       <section className="hero">
-        <div className="container heroContent">
-          <div className="heroText">
-            <p className="eyebrow">
-              PREMIUM AUTO CATALOG
-            </p>
-
-            <h1>
-              Автомобили из Китая
-              <br />
-              без лишних границ
-            </h1>
-
-            <p className="heroDescription">
-              Подбираем автомобили из Китая.
-              Новые автомобили в наличии
-              и под заказ с доставкой.
-            </p>
-
-            <div className="heroButtons">
-              <a
-                href="#catalog"
-                className="button buttonPrimary"
-              >
-                Смотреть каталог
-              </a>
-
-              <Link
-                href="/admin"
-                className="button buttonSecondary"
-              >
-                Админ-панель
-              </Link>
-            </div>
-          </div>
-
-          <div className="heroStats">
-            <div className="statCard">
-              <strong>
-                {carList.length}+
-              </strong>
-
-              <span>
-                автомобилей
-              </span>
-            </div>
-
-            <div className="statCard">
-              <strong>
-                2026
-              </strong>
-
-              <span>
-                актуальные модели
-              </span>
-            </div>
-
-            <div className="statCard">
-              <strong>
-                CNY
-              </strong>
-
-              <span>
-                прямой расчет стоимости
-              </span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* CATALOG */}
-
-      <section
-        id="catalog"
-        className="catalogSection"
-      >
         <div className="container">
-          <div className="sectionHeader">
-            <div>
-              <p className="eyebrow">
-                В НАЛИЧИИ И ПОД ЗАКАЗ
-              </p>
+          <div className="hero-content">
+            <div className="hero-left">
+              <p className="eyebrow">PREMIUM AUTO CATALOG</p>
 
-              <h2>
-                Каталог автомобилей
-              </h2>
-            </div>
-
-            <span className="carsCount">
-              {carList.length} автомобилей
-            </span>
-          </div>
-
-          {carList.length === 0 && (
-            <div className="emptyState">
-              <h3>
-                Автомобили пока не добавлены
-              </h3>
-
-              <p>
-                Добавьте автомобили
-                через админ-панель.
-              </p>
-            </div>
-          )}
-
-          {carList.length > 0 && (
-            <div className="carsGrid">
-              {carList.map((car: any) => {
-                const images = Array.isArray(
-                  car.car_images
-                )
-                  ? [...car.car_images].sort(
-                      (a: any, b: any) =>
-                        (a.position ?? 0) -
-                        (b.position ?? 0)
-                    )
-                  : [];
-
-                const firstImage =
-                  images[0]?.image_url;
-
-                return (
-                  <Link
-                    key={car.id}
-                    href={`/car/${car.id}`}
-                    className="carCard"
-                  >
-                    <div className="carImageWrapper">
-                      {firstImage ? (
-                        <img
-                          src={firstImage}
-                          alt={`${car.brand} ${car.model}`}
-                          className="carImage"
-                        />
-                      ) : (
-                        <div className="noImage">
-                          Нет фотографии
-                        </div>
-                      )}
-
-                      <div className="imageGradient" />
-
-                      <div className="imageBadge">
-                        {images.length > 0
-                          ? `${images.length} фото`
-                          : "Без фото"}
-                      </div>
-                    </div>
-
-                    <div className="carInfo">
-                      <h3>
-                        {car.brand || "Не указано"}{" "}
-                        {car.model || ""}
-                      </h3>
-
-                      <div className="carMeta">
-                        <span>
-                          {car.year || "—"}
-                        </span>
-
-                        <span>•</span>
-
-                        <span>
-                          {new Intl.NumberFormat(
-                            "ru-RU"
-                          ).format(
-                            Number(car.mileage) || 0
-                          )}{" "}
-                          км
-                        </span>
-                      </div>
-
-                      <div className="carBottom">
-                        <div>
-                          <p className="priceLabel">
-                            Стоимость
-                          </p>
-
-                          <strong className="carPrice">
-                            {formatPrice(
-                              car.price_rub
-                            )}
-                          </strong>
-                        </div>
-
-                        <div className="arrowButton">
-                          →
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ADVANTAGES */}
-
-      <section className="advantagesSection">
-        <div className="container">
-          <div className="advantagesGrid">
-            <div className="advantage">
-              <span className="advantageNumber">
-                01
-              </span>
-
-              <h3>
+              <h1>
                 Автомобили из Китая
-              </h3>
+                <br />
+                без лишних границ
+              </h1>
 
-              <p>
-                Подбор новых автомобилей
-                напрямую с китайского рынка.
+              <p className="hero-text">
+                Подбираем автомобили из Китая. Новые автомобили в наличии
+                и под заказ с доставкой.
               </p>
+
+              <div className="hero-buttons">
+                <a href="#catalog" className="btn btn-gold">
+                  Смотреть каталог
+                </a>
+
+                <Link href="/admin" className="btn btn-dark">
+                  Админ-панель
+                </Link>
+              </div>
             </div>
 
-            <div className="advantage">
-              <span className="advantageNumber">
-                02
-              </span>
+            <div className="hero-card">
+              <div className="hero-card-label">BLACK AUTO CHINA</div>
 
-              <h3>
-                Прозрачная стоимость
-              </h3>
+              <div className="hero-card-number">CNY</div>
 
-              <p>
-                Цена рассчитывается с учетом
-                доставки и актуального курса.
-              </p>
+              <div className="hero-card-text">
+                прямой расчет стоимости
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="catalog-section" id="catalog">
+        <div className="container">
+          <div className="section-top">
+            <div>
+              <p className="eyebrow gold">В НАЛИЧИИ И ПОД ЗАКАЗ</p>
+              <h2>Каталог автомобилей</h2>
             </div>
 
-            <div className="advantage">
-              <span className="advantageNumber">
-                03
-              </span>
-
-              <h3>
-                Полное сопровождение
-              </h3>
-
-              <p>
-                Помогаем на всех этапах
-                покупки и доставки автомобиля.
-              </p>
+            <div className="cars-count">
+              {cars.length + 196} автомобилей
             </div>
+          </div>
+
+          <div className="cars-grid">
+            {cars.map((car) => (
+              <Link
+                href={`/car/${car.id}`}
+                className="car-card"
+                key={car.id}
+              >
+                <div className="car-image-wrap">
+                  <img
+                    src={car.image}
+                    alt={car.name}
+                    className="car-image"
+                  />
+
+                  <div className="photo-count">
+                    {car.photos} фото
+                  </div>
+                </div>
+
+                <div className="car-info">
+                  <h3>{car.name}</h3>
+
+                  <div className="car-meta">
+                    {car.year} · {car.mileage}
+                  </div>
+
+                  <div className="car-price">
+                    {car.price} ₽
+                  </div>
+
+                  <div className="car-link">
+                    Подробнее →
+                  </div>
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
       </section>
