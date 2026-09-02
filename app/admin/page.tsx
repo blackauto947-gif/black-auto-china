@@ -25,11 +25,12 @@ export default function AdminPage() {
   const s = supabase();
   const router = useRouter();
 
-  const [form, setForm] = useState<any>(emptyCar);
+  const [form, setForm] = useState<any>({ ...emptyCar });
   const [cars, setCars] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [files, setFiles] = useState<FileList | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
+
   const [message, setMessage] = useState("");
   const [importing, setImporting] = useState(false);
 
@@ -45,7 +46,9 @@ export default function AdminPage() {
       s
         .from("cars")
         .select("*")
-        .order("created_at", { ascending: false }),
+        .order("created_at", {
+          ascending: false,
+        }),
 
       s
         .from("settings")
@@ -54,15 +57,29 @@ export default function AdminPage() {
         .single(),
     ]);
 
-    setCars(carsResult.data || []);
-    setSettings(settingsResult.data || null);
+    if (carsResult.error) {
+      setMessage(
+        `Ошибка загрузки автомобилей: ${carsResult.error.message}`
+      );
+    } else {
+      setCars(carsResult.data || []);
+    }
+
+    if (settingsResult.error) {
+      setMessage(
+        `Ошибка загрузки настроек: ${settingsResult.error.message}`
+      );
+    } else {
+      setSettings(settingsResult.data || null);
+    }
   }
 
   useEffect(() => {
     async function checkAdmin() {
-      const { data } = await s.auth.getUser();
+      const { data, error } =
+        await s.auth.getUser();
 
-      if (!data.user) {
+      if (error || !data.user) {
         router.push("/login");
         return;
       }
@@ -73,7 +90,10 @@ export default function AdminPage() {
         .eq("user_id", data.user.id)
         .maybeSingle();
 
-      if (!adminResult.data) {
+      if (
+        adminResult.error ||
+        !adminResult.data
+      ) {
         router.push("/");
         return;
       }
@@ -82,135 +102,363 @@ export default function AdminPage() {
     }
 
     checkAdmin();
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /*
+    Создаём SHA-256 хэш файла.
+
+    Одинаковые файлы будут иметь
+    одинаковый хэш.
+  */
+  async function getFileHash(file: File) {
+    const buffer =
+      await file.arrayBuffer();
+
+    const hashBuffer =
+      await crypto.subtle.digest(
+        "SHA-256",
+        buffer
+      );
+
+    const hashArray = Array.from(
+      new Uint8Array(hashBuffer)
+    );
+
+    return hashArray
+      .map((byte) =>
+        byte
+          .toString(16)
+          .padStart(2, "0")
+      )
+      .join("");
+  }
+
+  /*
+    Убираем дубликаты файлов.
+
+    Если два файла имеют одинаковое
+    содержимое — останется только один.
+  */
+  async function removeDuplicateFiles(
+    imageFiles: File[]
+  ) {
+    const uniqueFiles: File[] = [];
+
+    const hashes =
+      new Set<string>();
+
+    for (const file of imageFiles) {
+      try {
+        const hash =
+          await getFileHash(file);
+
+        if (hashes.has(hash)) {
+          continue;
+        }
+
+        hashes.add(hash);
+
+        uniqueFiles.push(file);
+      } catch (error) {
+        console.error(
+          "Ошибка проверки файла:",
+          file.name,
+          error
+        );
+
+        /*
+          Если хэш не удалось получить,
+          всё равно оставляем файл,
+          чтобы не потерять фотографию.
+        */
+        uniqueFiles.push(file);
+      }
+    }
+
+    return uniqueFiles;
+  }
+
+  /*
+    Загружаем фотографии автомобиля.
+
+    Перед загрузкой удаляем дубликаты.
+  */
   async function uploadCarImages(
     carId: string,
     imageFiles: File[]
   ) {
-    for (let i = 0; i < imageFiles.length; i++) {
-      const file = imageFiles[i];
+    const uniqueFiles =
+      await removeDuplicateFiles(
+        imageFiles
+      );
+
+    let uploadedCount = 0;
+
+    const skippedCount =
+      imageFiles.length -
+      uniqueFiles.length;
+
+    /*
+      Получаем уже существующие фото,
+      чтобы правильно продолжить position.
+    */
+    const existingResult = await s
+      .from("car_images")
+      .select("position")
+      .eq("car_id", carId)
+      .order("position", {
+        ascending: false,
+      })
+      .limit(1);
+
+    if (existingResult.error) {
+      throw new Error(
+        `Ошибка проверки существующих фотографий: ${existingResult.error.message}`
+      );
+    }
+
+    const lastPosition =
+      existingResult.data &&
+      existingResult.data.length > 0
+        ? Number(
+            existingResult.data[0].position
+          )
+        : -1;
+
+    for (
+      let i = 0;
+      i < uniqueFiles.length;
+      i++
+    ) {
+      const file =
+        uniqueFiles[i];
 
       const safeName = file.name.replace(
         /[^a-zA-Z0-9._-]/g,
         "_"
       );
 
-      const path =
-        `${carId}/${Date.now()}-${i}-${safeName}`;
+      /*
+        Добавляем timestamp + index,
+        чтобы имя файла в Storage
+        всегда было уникальным.
+      */
+      const uniqueName =
+        `${Date.now()}-${i}-${safeName}`;
 
-      const uploadResult = await s.storage
-        .from("car-images")
-        .upload(path, file);
+      const path =
+        `${carId}/${uniqueName}`;
+
+      const uploadResult =
+        await s.storage
+          .from("car-images")
+          .upload(path, file, {
+            upsert: false,
+          });
 
       if (uploadResult.error) {
         throw new Error(
-          `Ошибка загрузки ${file.name}: ${uploadResult.error.message}`
+          `Ошибка загрузки "${file.name}": ${uploadResult.error.message}`
         );
       }
 
-      const publicUrl = s.storage
-        .from("car-images")
-        .getPublicUrl(path)
-        .data.publicUrl;
+      const publicUrlResult =
+        s.storage
+          .from("car-images")
+          .getPublicUrl(path);
 
-      const imageResult = await s
-        .from("car_images")
-        .insert({
-          car_id: carId,
-          image_url: publicUrl,
-          position: i,
-        });
+      const publicUrl =
+        publicUrlResult.data.publicUrl;
+
+      if (!publicUrl) {
+        /*
+          Удаляем файл из Storage,
+          если URL не получен.
+        */
+        await s.storage
+          .from("car-images")
+          .remove([path]);
+
+        throw new Error(
+          `Не удалось получить ссылку для "${file.name}"`
+        );
+      }
+
+      const position =
+        lastPosition + 1 + i;
+
+      const imageResult =
+        await s
+          .from("car_images")
+          .insert({
+            car_id: carId,
+            image_url: publicUrl,
+            position,
+          });
 
       if (imageResult.error) {
+        /*
+          Если запись в БД не удалась,
+          удаляем уже загруженный файл.
+        */
+        await s.storage
+          .from("car-images")
+          .remove([path]);
+
         throw new Error(
-          `Ошибка сохранения фотографии: ${imageResult.error.message}`
+          `Ошибка сохранения "${file.name}": ${imageResult.error.message}`
         );
       }
+
+      uploadedCount++;
     }
+
+    return {
+      uploaded: uploadedCount,
+      skipped: skippedCount,
+    };
   }
 
-  async function saveCar(event: React.FormEvent) {
+  async function saveCar(
+    event: React.FormEvent
+  ) {
     event.preventDefault();
 
     if (!settings) {
-      setMessage("Не удалось загрузить настройки");
+      setMessage(
+        "Не удалось загрузить настройки"
+      );
+
       return;
     }
 
     const payload = {
       ...form,
+
       year: Number(form.year),
       mileage: Number(form.mileage),
       power: Number(form.power),
-      price_cny: Number(form.price_cny),
 
-      transport_cny: Number(settings.transport_cny),
+      price_cny: Number(
+        form.price_cny
+      ),
+
+      transport_cny: Number(
+        settings.transport_cny
+      ),
 
       price_rub: Math.round(
-        (Number(form.price_cny) +
-          Number(settings.transport_cny)) *
-          Number(settings.cny_rub_rate)
+        (
+          Number(form.price_cny) +
+          Number(
+            settings.transport_cny
+          )
+        ) *
+          Number(
+            settings.cny_rub_rate
+          )
       ),
     };
 
     let carId = editId;
 
-    if (editId) {
-      const result = await s
-        .from("cars")
-        .update(payload)
-        .eq("id", editId);
-
-      if (result.error) {
-        setMessage(result.error.message);
-        return;
-      }
-    } else {
-      const result = await s
-        .from("cars")
-        .insert(payload)
-        .select()
-        .single();
-
-      if (result.error) {
-        setMessage(result.error.message);
-        return;
-      }
-
-      carId = result.data.id;
-    }
-
     try {
-      if (files && carId) {
-        await uploadCarImages(
-          carId,
-          Array.from(files)
+      if (editId) {
+        const result =
+          await s
+            .from("cars")
+            .update(payload)
+            .eq("id", editId);
+
+        if (result.error) {
+          throw new Error(
+            result.error.message
+          );
+        }
+      } else {
+        const result =
+          await s
+            .from("cars")
+            .insert(payload)
+            .select()
+            .single();
+
+        if (result.error) {
+          throw new Error(
+            result.error.message
+          );
+        }
+
+        carId = result.data.id;
+      }
+
+      let uploadInfo = null;
+
+      if (
+        files &&
+        files.length > 0 &&
+        carId
+      ) {
+        uploadInfo =
+          await uploadCarImages(
+            carId,
+            Array.from(files)
+          );
+      }
+
+      if (uploadInfo) {
+        setMessage(
+          `Автомобиль сохранён. Загружено фото: ${uploadInfo.uploaded}. Дубликатов пропущено: ${uploadInfo.skipped}.`
+        );
+      } else {
+        setMessage(
+          "Автомобиль успешно сохранён"
         );
       }
 
-      setMessage("Автомобиль успешно сохранён");
+      setForm({
+        ...emptyCar,
+      });
 
-      setForm(emptyCar);
       setEditId(null);
+
       setFiles(null);
 
       await loadData();
     } catch (error: any) {
       setMessage(
-        error.message || "Ошибка загрузки фотографий"
+        error?.message ||
+          "Ошибка сохранения автомобиля"
       );
     }
   }
 
+  /*
+    Получаем марку и модель
+    из названия папки.
+
+    Пример:
+    106 BMW X1
+
+    Результат:
+    brand = BMW
+    model = X1
+  */
   function getCarNameFromFolder(
     folderName: string
   ) {
-    const cleaned = folderName
-      .replace(/^\d+\s*/, "")
-      .trim();
+    const cleaned =
+      folderName
+        .replace(
+          /^\d+\s*/,
+          ""
+        )
+        .trim();
 
-    const parts = cleaned.split(/\s+/);
+    const parts =
+      cleaned.split(/\s+/);
 
     const knownBrands = [
       "BMW",
@@ -219,7 +467,6 @@ export default function AdminPage() {
       "Honda",
       "Audi",
       "Mercedes",
-      "Mercedes-Benz",
       "Hyundai",
       "Kia",
       "Nissan",
@@ -236,77 +483,157 @@ export default function AdminPage() {
       "Tank",
     ];
 
-    const firstWord = parts[0]?.toLowerCase();
+    /*
+      Проверяем Mercedes-Benz
+      отдельно, потому что
+      название состоит из
+      нескольких частей.
+    */
+    if (
+      cleaned
+        .toLowerCase()
+        .startsWith(
+          "mercedes-benz "
+        )
+    ) {
+      return {
+        brand: "Mercedes-Benz",
+        model: cleaned
+          .substring(
+            "Mercedes-Benz".length
+          )
+          .trim(),
+      };
+    }
 
-    const brand = knownBrands.find(
-      (item) =>
-        item.toLowerCase() === firstWord
-    );
+    const firstWord =
+      parts[0]?.toLowerCase();
+
+    const brand =
+      knownBrands.find(
+        (item) =>
+          item.toLowerCase() ===
+          firstWord
+      );
 
     if (brand) {
       return {
         brand,
-        model: parts.slice(1).join(" "),
+        model: parts
+          .slice(1)
+          .join(" "),
       };
     }
 
     return {
-      brand: "",
-      model: cleaned,
+      brand: "Не указано",
+      model:
+        cleaned || folderName,
     };
   }
 
-  async function importFolder(
-    event: React.ChangeEvent<HTMLInputElement>
-  ) {
-    const selectedFiles = event.target.files;
+  /*
+    Импорт папки.
 
-    if (!selectedFiles || selectedFiles.length === 0) {
+    Каждая вложенная папка —
+    отдельный автомобиль.
+  */
+  async function importFolder(
+    event: React.ChangeEvent<
+      HTMLInputElement
+    >
+  ) {
+    const selectedFiles =
+      event.target.files;
+
+    if (
+      !selectedFiles ||
+      selectedFiles.length === 0
+    ) {
       return;
     }
 
     if (!settings) {
-      setMessage("Сначала дождитесь загрузки настроек");
+      setMessage(
+        "Сначала дождитесь загрузки настроек"
+      );
+
+      event.target.value = "";
+
       return;
     }
 
     setImporting(true);
 
     try {
-      const filesArray = Array.from(selectedFiles);
+      const filesArray =
+        Array.from(
+          selectedFiles
+        );
 
-      const imageFiles = filesArray.filter(
-        (file) =>
-          file.type.startsWith("image/")
-      );
+      /*
+        Берём только изображения.
+      */
+      const imageFiles =
+        filesArray.filter(
+          (file) =>
+            file.type.startsWith(
+              "image/"
+            )
+        );
 
-      if (imageFiles.length === 0) {
+      if (
+        imageFiles.length === 0
+      ) {
         throw new Error(
           "В выбранной папке не найдено фотографий"
         );
       }
 
-      const folders = new Map<
-        string,
-        File[]
-      >();
+      /*
+        Группируем фотографии
+        по папкам автомобилей.
+      */
+      const folders =
+        new Map<
+          string,
+          File[]
+        >();
 
-      for (const file of imageFiles) {
+      for (
+        const file of imageFiles
+      ) {
         const path =
           file.webkitRelativePath ||
           file.name;
 
-        const pathParts = path.split("/");
+        const pathParts =
+          path.split("/");
 
-        if (pathParts.length < 3) {
+        /*
+          Ожидаем:
+          Сток 3 / BMW X1 / photo.jpg
+        */
+        if (
+          pathParts.length < 3
+        ) {
           continue;
         }
 
         const carFolder =
-          pathParts[pathParts.length - 2];
+          pathParts[
+            pathParts.length - 2
+          ];
 
-        if (!folders.has(carFolder)) {
-          folders.set(carFolder, []);
+        if (
+          !folders.has(
+            carFolder
+          )
+        ) {
+          folders.set(
+            carFolder,
+            []
+          );
         }
 
         folders
@@ -314,7 +641,9 @@ export default function AdminPage() {
           .push(file);
       }
 
-      if (folders.size === 0) {
+      if (
+        folders.size === 0
+      ) {
         throw new Error(
           "Не удалось найти папки автомобилей. Выберите главную папку «Сток 3»."
         );
@@ -322,54 +651,83 @@ export default function AdminPage() {
 
       let importedCount = 0;
 
-      for (const [
-        folderName,
-        carImages,
-      ] of folders.entries()) {
+      let totalUploaded = 0;
 
+      let totalSkipped = 0;
+
+      for (
+        const [
+          folderName,
+          carImages,
+        ] of folders.entries()
+      ) {
         setMessage(
           `Импорт: ${folderName} (${importedCount + 1}/${folders.size})`
         );
 
+        /*
+          Сначала убираем дубликаты.
+        */
+        const uniqueImages =
+          await removeDuplicateFiles(
+            carImages
+          );
+
+        /*
+          Если после проверки
+          фотографий не осталось —
+          пропускаем автомобиль.
+        */
+        if (
+          uniqueImages.length === 0
+        ) {
+          continue;
+        }
+
         const carName =
-          getCarNameFromFolder(folderName);
+          getCarNameFromFolder(
+            folderName
+          );
 
         const payload = {
           ...emptyCar,
 
           brand:
-            carName.brand ||
-            "Не указано",
+            carName.brand,
 
           model:
-            carName.model ||
-            folderName,
+            carName.model,
 
           year:
-            new Date().getFullYear(),
+            new Date()
+              .getFullYear(),
 
           transport_cny:
             Number(
               settings.transport_cny
             ),
 
-          price_rub: Math.round(
-            Number(
-              settings.transport_cny
-            ) *
+          price_rub:
+            Math.round(
               Number(
-                settings.cny_rub_rate
-              )
-          ),
+                settings.transport_cny
+              ) *
+                Number(
+                  settings.cny_rub_rate
+                )
+            ),
         };
 
-        const insertResult = await s
-          .from("cars")
-          .insert(payload)
-          .select()
-          .single();
+        const insertResult =
+          await s
+            .from("cars")
+            .insert(payload)
+            .select()
+            .single();
 
-        if (insertResult.error) {
+        if (
+          insertResult.error
+        ) {
           throw new Error(
             `Ошибка создания ${folderName}: ${insertResult.error.message}`
           );
@@ -378,53 +736,80 @@ export default function AdminPage() {
         const carId =
           insertResult.data.id;
 
-        await uploadCarImages(
-          carId,
-          carImages
-        );
+        /*
+          Загружаем уже проверенные
+          уникальные фотографии.
+        */
+        const uploadInfo =
+          await uploadCarImages(
+            carId,
+            uniqueImages
+          );
 
         importedCount++;
+
+        totalUploaded +=
+          uploadInfo.uploaded;
+
+        /*
+          Считаем дубликаты
+          из исходной папки.
+        */
+        totalSkipped +=
+          carImages.length -
+          uniqueImages.length;
       }
 
       setMessage(
-        `Готово! Импортировано автомобилей: ${importedCount}`
+        `Готово! Автомобилей: ${importedCount}. Фотографий загружено: ${totalUploaded}. Дубликатов пропущено: ${totalSkipped}.`
       );
 
       await loadData();
-
     } catch (error: any) {
-
-      setMessage(
-        error.message ||
-          "Ошибка импорта"
+      console.error(
+        "Ошибка импорта:",
+        error
       );
 
+      setMessage(
+        error?.message ||
+          "Ошибка импорта"
+      );
     } finally {
-
       setImporting(false);
 
+      /*
+        Позволяет выбрать
+        ту же папку повторно.
+      */
       event.target.value = "";
-
     }
   }
 
   async function saveSettings() {
-    if (!settings) return;
+    if (!settings) {
+      return;
+    }
 
-    const result = await s
-      .from("settings")
-      .update({
-        cny_rub_rate: Number(
-          settings.cny_rub_rate
-        ),
-        transport_cny: Number(
-          settings.transport_cny
-        ),
-      })
-      .eq("id", 1);
+    const result =
+      await s
+        .from("settings")
+        .update({
+          cny_rub_rate: Number(
+            settings.cny_rub_rate
+          ),
+
+          transport_cny: Number(
+            settings.transport_cny
+          ),
+        })
+        .eq("id", 1);
 
     if (result.error) {
-      setMessage(result.error.message);
+      setMessage(
+        result.error.message
+      );
+
       return;
     }
 
@@ -433,31 +818,48 @@ export default function AdminPage() {
     );
   }
 
-  async function deleteCar(id: string) {
-    const confirmed = window.confirm(
-      "Удалить этот автомобиль?"
-    );
+  async function deleteCar(
+    id: string
+  ) {
+    const confirmed =
+      window.confirm(
+        "Удалить этот автомобиль?"
+      );
 
-    if (!confirmed) return;
-
-    const result = await s
-      .from("cars")
-      .delete()
-      .eq("id", id);
-
-    if (result.error) {
-      setMessage(result.error.message);
+    if (!confirmed) {
       return;
     }
 
-    setMessage("Автомобиль удалён");
+    const result =
+      await s
+        .from("cars")
+        .delete()
+        .eq("id", id);
+
+    if (result.error) {
+      setMessage(
+        result.error.message
+      );
+
+      return;
+    }
+
+    setMessage(
+      "Автомобиль удалён"
+    );
 
     await loadData();
   }
 
-  function startEditing(car: any) {
+  function startEditing(
+    car: any
+  ) {
     setEditId(car.id);
-    setForm(car);
+
+    setForm({
+      ...emptyCar,
+      ...car,
+    });
 
     window.scrollTo({
       top: 0,
@@ -467,6 +869,7 @@ export default function AdminPage() {
 
   async function logout() {
     await s.auth.signOut();
+
     router.push("/login");
   }
 
@@ -488,6 +891,7 @@ export default function AdminPage() {
     <main className="wrap">
 
       <div className="top">
+
         <div>
           <p>
             УПРАВЛЕНИЕ КАТАЛОГОМ
@@ -498,9 +902,12 @@ export default function AdminPage() {
           </h1>
         </div>
 
-        <button onClick={logout}>
+        <button
+          onClick={logout}
+        >
           Выйти
         </button>
+
       </div>
 
       <section className="panel">
@@ -511,10 +918,17 @@ export default function AdminPage() {
 
         <p>
           Выберите главную папку
-          «Сток 3».
-          Каждый вложенный каталог
-          будет создан как отдельный
+          «Сток 3». Каждая
+          вложенная папка будет
+          создана как отдельный
           автомобиль.
+        </p>
+
+        <p>
+          Одинаковые фотографии
+          внутри одной папки
+          автоматически
+          пропускаются.
         </p>
 
         <label
@@ -530,9 +944,14 @@ export default function AdminPage() {
             // @ts-ignore
             webkitdirectory=""
             directory=""
-            onChange={importFolder}
-            disabled={importing}
+            onChange={
+              importFolder
+            }
+            disabled={
+              importing
+            }
           />
+
         </label>
 
       </section>
@@ -545,7 +964,8 @@ export default function AdminPage() {
 
         <input
           value={
-            settings?.cny_rub_rate || ""
+            settings?.cny_rub_rate ??
+            ""
           }
           onChange={(event) =>
             setSettings({
@@ -559,7 +979,8 @@ export default function AdminPage() {
 
         <input
           value={
-            settings?.transport_cny || ""
+            settings?.transport_cny ??
+            ""
           }
           onChange={(event) =>
             setSettings({
@@ -572,7 +993,9 @@ export default function AdminPage() {
         />
 
         <button
-          onClick={saveSettings}
+          onClick={
+            saveSettings
+          }
         >
           Сохранить настройки
         </button>
@@ -592,33 +1015,42 @@ export default function AdminPage() {
           className="form"
         >
 
-          {fields.map((field) => (
+          {fields.map(
+            (field) => (
 
-            <label key={field}>
+              <label
+                key={field}
+              >
 
-              {field}
+                {field}
 
-              <input
-                value={
-                  form[field] ?? ""
-                }
-                onChange={(event) =>
-                  updateField(
-                    field,
-                    event.target.value
-                  )
-                }
-                required={[
-                  "brand",
-                  "model",
-                  "year",
-                  "price_cny",
-                ].includes(field)}
-              />
+                <input
+                  value={
+                    form[field] ??
+                    ""
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    updateField(
+                      field,
+                      event.target.value
+                    )
+                  }
+                  required={[
+                    "brand",
+                    "model",
+                    "year",
+                    "price_cny",
+                  ].includes(
+                    field
+                  )}
+                />
 
-            </label>
+              </label>
 
-          ))}
+            )
+          )}
 
           <label className="wide">
 
@@ -626,9 +1058,12 @@ export default function AdminPage() {
 
             <textarea
               value={
-                form.description_ru
+                form.description_ru ??
+                ""
               }
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 updateField(
                   "description_ru",
                   event.target.value
@@ -646,7 +1081,9 @@ export default function AdminPage() {
               type="file"
               accept="image/*"
               multiple
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 setFiles(
                   event.target.files
                 )
@@ -660,9 +1097,13 @@ export default function AdminPage() {
             <input
               type="checkbox"
               checked={
-                form.is_published
+                Boolean(
+                  form.is_published
+                )
               }
-              onChange={(event) =>
+              onChange={(
+                event
+              ) =>
                 updateField(
                   "is_published",
                   event.target.checked
@@ -693,9 +1134,12 @@ export default function AdminPage() {
         </h2>
 
         {cars.length === 0 && (
+
           <p>
-            Автомобили пока не добавлены.
+            Автомобили пока
+            не добавлены.
           </p>
+
         )}
 
         {cars.map((car) => (
@@ -708,7 +1152,8 @@ export default function AdminPage() {
             <div>
 
               <b>
-                {car.brand} {car.model}
+                {car.brand}{" "}
+                {car.model}
               </b>
 
               <br />
@@ -725,7 +1170,9 @@ export default function AdminPage() {
 
               <button
                 onClick={() =>
-                  startEditing(car)
+                  startEditing(
+                    car
+                  )
                 }
               >
                 Редактировать
@@ -733,7 +1180,9 @@ export default function AdminPage() {
 
               <button
                 onClick={() =>
-                  deleteCar(car.id)
+                  deleteCar(
+                    car.id
+                  )
                 }
               >
                 Удалить
