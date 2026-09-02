@@ -1,5 +1,54 @@
-"use client";
-import {useState} from "react";import {useRouter} from "next/navigation";import {supabase} from "@/lib/supabase";
-export default function Login(){const[email,setEmail]=useState("");const[password,setPassword]=useState("");const[error,setError]=useState("");const r=useRouter();
-async function login(e:any){e.preventDefault();const x=await supabase().auth.signInWithPassword({email,password});if(x.error)setError(x.error.message);else r.push("/admin")}
-return <main className="login"><form onSubmit={login}><p>BLACK AUTO CHINA</p><h1>Вход администратора</h1><input type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} required/><input type="password" placeholder="Пароль" value={password} onChange={e=>setPassword(e.target.value)} required/>{error&&<b>{error}</b>}<button>Войти</button></form></main>}
+import Link from "next/link";
+
+export default function LoginPage() {
+  return (
+    <main>
+      <section className="form-page">
+        <div className="form-card">
+          <Link href="/" className="logo">
+            BLACK AUTO CHINA
+          </Link>
+
+          <span className="eyebrow">
+            ОСТАВИТЬ ЗАЯВКУ
+          </span>
+
+          <h1>Мы свяжемся с вами</h1>
+
+          <p>
+            Оставьте контакты, и мы расскажем
+            подробнее об автомобиле.
+          </p>
+
+          <form className="contact-form">
+            <input
+              type="text"
+              placeholder="Ваше имя"
+            />
+
+            <input
+              type="tel"
+              placeholder="Телефон"
+            />
+
+            <textarea
+              placeholder="Комментарий"
+              rows={5}
+            />
+
+            <button
+              type="submit"
+              className="button button-primary full-button"
+            >
+              Отправить заявку
+            </button>
+          </form>
+
+          <Link href="/car" className="back-link">
+            ← Вернуться в каталог
+          </Link>
+        </div>
+      </section>
+    </main>
+  );
+}
