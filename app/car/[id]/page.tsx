@@ -1,206 +1,162 @@
+"use client";
+
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { useState } from "react";
+import { cars, formatPrice } from "../../../lib/cars";
 
-type PageProps = {
-  params: Promise<{
+type Props = {
+  params: {
     id: string;
-  }>;
+  };
 };
 
-type Car = {
-  id: string;
-  name: string;
-  year: number;
-  mileage: string;
-  price: number;
-  images: string[];
-  engine?: string;
-  transmission?: string;
-  drive?: string;
-  body?: string;
-  color?: string;
-};
+export default function CarPage({ params }: Props) {
+  const car = cars.find((item) => item.id === params.id);
 
-const cars: Car[] = [
-  {
-    id: "honda-vezel",
-    name: "Honda Vezel",
-    year: 2026,
-    mileage: "0 км",
-    price: 330000,
-    images: [
-      "https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6?auto=format&fit=crop&w=1600&q=85",
-      "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1600&q=85",
-      "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1600&q=85",
-    ],
-    engine: "1.5 л",
-    transmission: "Автомат",
-    drive: "Передний",
-    body: "Кроссовер",
-    color: "Белый",
-  },
-
-  {
-    id: "audi-q3",
-    name: "Audi Q3",
-    year: 2026,
-    mileage: "0 км",
-    price: 4150000,
-    images: [
-      "https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1600&q=85",
-      "https://images.unsplash.com/photo-1542282088-72c9c27ed0cd?auto=format&fit=crop&w=1600&q=85",
-      "https://images.unsplash.com/photo-1494905998402-395d579af36f?auto=format&fit=crop&w=1600&q=85",
-    ],
-    engine: "2.0 л",
-    transmission: "Автомат",
-    drive: "Полный",
-    body: "Кроссовер",
-    color: "Черный",
-  },
-
-  {
-    id: "audi-q5",
-    name: "Audi Q5",
-    year: 2026,
-    mileage: "0 км",
-    price: 5200000,
-    images: [
-      "https://images.unsplash.com/photo-1609521263047-f8f205293f24?auto=format&fit=crop&w=1600&q=85",
-      "https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?auto=format&fit=crop&w=1600&q=85",
-      "https://images.unsplash.com/photo-1603584173870-7f23fdae1b7a?auto=format&fit=crop&w=1600&q=85",
-    ],
-    engine: "2.0 л",
-    transmission: "Автомат",
-    drive: "Полный",
-    body: "Кроссовер",
-    color: "Серый",
-  },
-];
-
-function formatPrice(price: number) {
-  return new Intl.NumberFormat("ru-RU").format(price);
-}
-
-export default async function CarPage({ params }: PageProps) {
-  const { id } = await params;
-
-  const car = cars.find((item) => item.id === id);
+  const [activeImage, setActiveImage] = useState(0);
 
   if (!car) {
-    notFound();
+    return (
+      <main className="not-found-page">
+        <div className="container">
+          <h1>Автомобиль не найден</h1>
+
+          <Link href="/car" className="button button-primary">
+            ← Вернуться в каталог
+          </Link>
+        </div>
+      </main>
+    );
   }
 
   return (
-    <main className="car-page">
-      <div className="car-container">
-        <Link href="/" className="back-link">
-          ← Вернуться в каталог
-        </Link>
+    <main>
+      <header className="header">
+        <div className="container header-inner">
+          <Link href="/" className="logo">
+            BLACK AUTO CHINA
+          </Link>
 
-        <div className="car-header">
-          <div>
-            <p className="car-label">АВТОМОБИЛЬ В НАЛИЧИИ</p>
-
-            <h1>{car.name}</h1>
-
-            <div className="car-meta">
-              {car.year} · {car.mileage}
-            </div>
-          </div>
-
-          <div className="car-price-box">
-            <span>Стоимость</span>
-
-            <strong>
-              {formatPrice(car.price)} ₽
-            </strong>
-          </div>
+          <nav className="nav">
+            <Link href="/car">Каталог</Link>
+            <Link href="/admin">Админ-панель</Link>
+          </nav>
         </div>
+      </header>
 
-        <section className="car-gallery">
-          <div className="main-photo">
-            <img
-              src={car.images[0]}
-              alt={car.name}
-            />
-          </div>
+      <section className="car-page">
+        <div className="container">
+          <Link href="/car" className="back-link">
+            ← Вернуться в каталог
+          </Link>
 
-          <div className="gallery-grid">
-            {car.images.slice(1).map((image, index) => (
-              <div
-                className="gallery-photo"
-                key={image}
-              >
-                <img
-                  src={image}
-                  alt={`${car.name} фото ${index + 2}`}
-                />
-              </div>
-            ))}
-          </div>
-        </section>
+          <div className="car-page-title">
+            <div>
+              <span className="eyebrow">
+                {car.brand.toUpperCase()}
+              </span>
 
-        <section className="car-content">
-          <div className="specifications">
-            <h2>Характеристики</h2>
+              <h1>{car.name}</h1>
 
-            <div className="spec-grid">
-              <div className="spec-item">
-                <span>Год выпуска</span>
-                <strong>{car.year}</strong>
-              </div>
+              <p>
+                {car.year} · {car.mileage}
+              </p>
+            </div>
 
-              <div className="spec-item">
-                <span>Пробег</span>
-                <strong>{car.mileage}</strong>
-              </div>
-
-              <div className="spec-item">
-                <span>Двигатель</span>
-                <strong>{car.engine || "Не указано"}</strong>
-              </div>
-
-              <div className="spec-item">
-                <span>Коробка передач</span>
-                <strong>
-                  {car.transmission || "Не указано"}
-                </strong>
-              </div>
-
-              <div className="spec-item">
-                <span>Привод</span>
-                <strong>{car.drive || "Не указано"}</strong>
-              </div>
-
-              <div className="spec-item">
-                <span>Тип кузова</span>
-                <strong>{car.body || "Не указано"}</strong>
-              </div>
-
-              <div className="spec-item">
-                <span>Цвет</span>
-                <strong>{car.color || "Не указано"}</strong>
-              </div>
+            <div className="car-page-price">
+              {formatPrice(car.price)}
             </div>
           </div>
 
-          <aside className="request-card">
-            <p>Цена автомобиля</p>
+          <div className="car-layout">
+            <div className="gallery">
+              <div className="main-image">
+                <img
+                  src={car.images[activeImage]}
+                  alt={car.name}
+                />
 
-            <h2>
-              {formatPrice(car.price)} ₽
-            </h2>
+                <div className="image-counter">
+                  {activeImage + 1} / {car.images.length}
+                </div>
+              </div>
 
-            <button>
-              Оставить заявку
-            </button>
+              <div className="thumbnails">
+                {car.images.map((image, index) => (
+                  <button
+                    key={image}
+                    type="button"
+                    className={
+                      index === activeImage
+                        ? "thumbnail active"
+                        : "thumbnail"
+                    }
+                    onClick={() => setActiveImage(index)}
+                  >
+                    <img
+                      src={image}
+                      alt={`${car.name} фото ${index + 1}`}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
 
-            <span>
-              Менеджер свяжется с вами для уточнения деталей
-            </span>
-          </aside>
-        </section>
-      </div>
+            <aside className="order-card">
+              <span className="eyebrow">
+                АВТОМОБИЛЬ ПОД ЗАКАЗ
+              </span>
+
+              <h2>{car.name}</h2>
+
+              <div className="order-price">
+                {formatPrice(car.price)}
+              </div>
+
+              <p>
+                Оставьте заявку, и мы свяжемся
+                с вами для уточнения всех деталей.
+              </p>
+
+              <Link href="/login" className="button button-primary full-button">
+                Оставить заявку
+              </Link>
+            </aside>
+          </div>
+
+          <section className="car-details">
+            <div className="description-block">
+              <span className="eyebrow">
+                ОБ АВТОМОБИЛЕ
+              </span>
+
+              <h2>Описание</h2>
+
+              <p>{car.description}</p>
+            </div>
+
+            <div className="characteristics-block">
+              <span className="eyebrow">
+                ТЕХНИЧЕСКИЕ ДАННЫЕ
+              </span>
+
+              <h2>Характеристики</h2>
+
+              <div className="characteristics-grid">
+                {car.characteristics.map((item) => (
+                  <div
+                    className="characteristic"
+                    key={item.label}
+                  >
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
     </main>
   );
 }
