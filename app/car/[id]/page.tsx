@@ -2,206 +2,240 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-export default function CarPage() {
+type Car = {
+  id: string;
+  brand: string;
+  model: string;
+  year: number;
+  mileage: number;
+  power: number;
+  engine: string;
+  transmission: string;
+  drive: string;
+  body_type: string;
+  color: string;
+  price_cny: number;
+  price_rub: number;
+  description_ru: string;
+};
+
+type CarImage = {
+  id: string;
+  image_url: string;
+  position: number;
+};
+
+export default function CarPage({
+  params,
+}: {
+  params: { id: string };
+}) {
   const s = supabase();
-  const params = useParams();
 
-  const carId = params.id as string;
-
-  const [car, setCar] = useState<any>(null);
-  const [images, setImages] = useState<any[]>([]);
+  const [car, setCar] = useState<Car | null>(null);
+  const [images, setImages] = useState<CarImage[]>([]);
   const [activeImage, setActiveImage] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadCar() {
-      if (!carId) return;
-
       setLoading(true);
 
-      const [carResult, imagesResult] =
-        await Promise.all([
-          s
-            .from("cars")
-            .select("*")
-            .eq("id", carId)
-            .eq("is_published", true)
-            .single(),
+      const carResult = await s
+        .from("cars")
+        .select("*")
+        .eq("id", params.id)
+        .single();
 
-          s
-            .from("car_images")
-            .select("*")
-            .eq("car_id", carId)
-            .order("position", {
-              ascending: true,
-            }),
-        ]);
-
-      if (!carResult.error) {
-        setCar(carResult.data);
+      if (carResult.error || !carResult.data) {
+        setCar(null);
+        setLoading(false);
+        return;
       }
 
-      if (!imagesResult.error) {
-        setImages(imagesResult.data || []);
-      }
+      setCar(carResult.data);
+
+      const imagesResult = await s
+        .from("car_images")
+        .select("*")
+        .eq("car_id", params.id)
+        .order("position", {
+          ascending: true,
+        });
+
+      setImages(imagesResult.data || []);
 
       setLoading(false);
     }
 
     loadCar();
-  }, [carId]);
+  }, [params.id]);
 
   if (loading) {
     return (
-      <main className="carPage">
-        <div className="carLoading">
-          Загрузка автомобиля...
-        </div>
+      <main className="wrap car-page">
+        <p>Загрузка автомобиля...</p>
       </main>
     );
   }
 
   if (!car) {
     return (
-      <main className="carPage">
-        <div className="carNotFound">
+      <main className="wrap car-page">
+        <h1>Автомобиль не найден</h1>
 
-          <h1>
-            Автомобиль не найден
-          </h1>
-
-          <Link
-            href="/"
-            className="backButton"
-          >
-            ← Вернуться в каталог
-          </Link>
-
-        </div>
+        <Link
+          href="/"
+          className="back-link"
+        >
+          ← Вернуться в каталог
+        </Link>
       </main>
     );
   }
 
-  const activeImageUrl =
-    images[activeImage]?.image_url;
+  const specs = [
+    {
+      label: "Год выпуска",
+      value: car.year || "Не указано",
+    },
+    {
+      label: "Пробег",
+      value: car.mileage
+        ? `${car.mileage.toLocaleString()} км`
+        : "Не указано",
+    },
+    {
+      label: "Мощность",
+      value: car.power
+        ? `${car.power} л.с.`
+        : "Не указано",
+    },
+    {
+      label: "Двигатель",
+      value: car.engine || "Не указано",
+    },
+    {
+      label: "Коробка передач",
+      value:
+        car.transmission ||
+        "Не указано",
+    },
+    {
+      label: "Привод",
+      value: car.drive || "Не указано",
+    },
+    {
+      label: "Тип кузова",
+      value:
+        car.body_type ||
+        "Не указано",
+    },
+    {
+      label: "Цвет",
+      value: car.color || "Не указано",
+    },
+  ];
 
   return (
-    <main className="carPage">
+    <main className="wrap car-page">
 
-      <div className="carContainer">
+      <Link
+        href="/"
+        className="back-link"
+      >
+        ← Назад в каталог
+      </Link>
 
-        <Link
-          href="/"
-          className="backButton"
-        >
-          ← Назад в каталог
-        </Link>
+      <h1 className="car-title">
+        {car.brand} {car.model}
+      </h1>
 
-        <div className="carHeader">
+      <p className="car-subtitle">
+        {car.year} •{" "}
+        {car.mileage
+          ? `${car.mileage.toLocaleString()} км`
+          : "Пробег не указан"}
+      </p>
 
-          <div>
+      <section className="car-gallery">
 
-            <p className="carBrand">
-              {car.brand}
-            </p>
+        <div className="main-image">
 
-            <h1>
-              {car.brand} {car.model}
-            </h1>
+          {images.length > 0 ? (
 
-            <p className="carYear">
+            <img
+              src={
+                images[
+                  activeImage
+                ]?.image_url
+              }
+              alt={`${car.brand} ${car.model}`}
+            />
 
-              {car.year}
+          ) : (
 
-              {car.mileage !== null && (
-                <>
-                  {" • "}
-                  {Number(
-                    car.mileage
-                  ).toLocaleString("ru-RU")} км
-                </>
-              )}
-
-            </p>
-
-          </div>
-
-          <div className="carPrice">
-
-            {Number(
-              car.price_rub || 0
-            ).toLocaleString("ru-RU")} ₽
-
-          </div>
-
-        </div>
-
-        {/* ГАЛЕРЕЯ */}
-
-        <section className="gallery">
-
-          <div className="mainImage">
-
-            {activeImageUrl ? (
-
-              <img
-                src={activeImageUrl}
-                alt={`${car.brand} ${car.model}`}
-              />
-
-            ) : (
-
-              <div className="noImage">
-                Нет фотографий
-              </div>
-
-            )}
-
-          </div>
-
-          {images.length > 1 && (
-
-            <div className="thumbnails">
-
-              {images.map(
-                (image, index) => (
-
-                  <button
-                    key={image.id}
-                    className={
-                      index === activeImage
-                        ? "thumbnail active"
-                        : "thumbnail"
-                    }
-                    onClick={() =>
-                      setActiveImage(index)
-                    }
-                  >
-
-                    <img
-                      src={image.image_url}
-                      alt={`Фото ${index + 1}`}
-                    />
-
-                  </button>
-
-                )
-              )}
-
+            <div
+              style={{
+                height: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#888",
+              }}
+            >
+              Фотографии отсутствуют
             </div>
 
           )}
 
-        </section>
+        </div>
 
-        {/* ИНФОРМАЦИЯ */}
+        {images.length > 1 && (
 
-        <section className="carInfo">
+          <div className="thumbnails">
 
-          <div className="infoBlock">
+            {images.map(
+              (image, index) => (
+
+                <button
+                  key={image.id}
+                  type="button"
+                  className={
+                    index === activeImage
+                      ? "thumbnail active"
+                      : "thumbnail"
+                  }
+                  onClick={() =>
+                    setActiveImage(index)
+                  }
+                >
+
+                  <img
+                    src={
+                      image.image_url
+                    }
+                    alt={`${car.brand} ${index + 1}`}
+                  />
+
+                </button>
+
+              )
+            )}
+
+          </div>
+
+        )}
+
+      </section>
+
+      <section className="car-info-grid">
+
+        <div>
+
+          <div className="car-details">
 
             <h2>
               Характеристики
@@ -209,142 +243,97 @@ export default function CarPage() {
 
             <div className="specs">
 
-              <div>
-                <span>Год</span>
-                <b>{car.year}</b>
-              </div>
+              {specs.map((spec) => (
 
-              <div>
-                <span>Пробег</span>
-                <b>
-                  {Number(
-                    car.mileage || 0
-                  ).toLocaleString("ru-RU")} км
-                </b>
-              </div>
+                <div
+                  className="spec"
+                  key={spec.label}
+                >
 
-              {car.power && (
+                  <div className="spec-label">
+                    {spec.label}
+                  </div>
 
-                <div>
-                  <span>Мощность</span>
-                  <b>
-                    {car.power} л.с.
-                  </b>
+                  <div className="spec-value">
+                    {spec.value}
+                  </div>
+
                 </div>
 
-              )}
-
-              {car.engine && (
-
-                <div>
-                  <span>Двигатель</span>
-                  <b>
-                    {car.engine}
-                  </b>
-                </div>
-
-              )}
-
-              {car.transmission && (
-
-                <div>
-                  <span>Коробка</span>
-                  <b>
-                    {car.transmission}
-                  </b>
-                </div>
-
-              )}
-
-              {car.drive && (
-
-                <div>
-                  <span>Привод</span>
-                  <b>
-                    {car.drive}
-                  </b>
-                </div>
-
-              )}
-
-              {car.body_type && (
-
-                <div>
-                  <span>Кузов</span>
-                  <b>
-                    {car.body_type}
-                  </b>
-                </div>
-
-              )}
-
-              {car.color && (
-
-                <div>
-                  <span>Цвет</span>
-                  <b>
-                    {car.color}
-                  </b>
-                </div>
-
-              )}
+              ))}
 
             </div>
 
           </div>
 
-          <div className="priceBlock">
+          {car.description_ru && (
 
-            <span>
-              Цена автомобиля
-            </span>
+            <div className="car-details description">
 
-            <strong>
-              {Number(
-                car.price_rub || 0
-              ).toLocaleString("ru-RU")} ₽
-            </strong>
+              <h2>
+                Описание
+              </h2>
 
-            {car.price_cny > 0 && (
+              <p>
+                {car.description_ru}
+              </p>
 
-              <small>
-                Цена в Китае:{" "}
+            </div>
 
-                {Number(
-                  car.price_cny
-                ).toLocaleString("ru-RU")} CNY
+          )}
 
-              </small>
+        </div>
 
-            )}
+        <aside className="price-card">
 
-            <button>
-              Оставить заявку
-            </button>
+          <div className="price-label">
+            Цена автомобиля
+          </div>
+
+          <div className="price">
+
+            {Number(
+              car.price_rub
+            ).toLocaleString("ru-RU")} ₽
 
           </div>
 
-        </section>
+          {car.price_cny > 0 && (
 
-        {/* ОПИСАНИЕ */}
+            <p
+              style={{
+                color: "#999",
+                marginBottom: "25px",
+              }}
+            >
 
-        {car.description_ru && (
+              Цена в Китае:{" "}
 
-          <section className="description">
+              {Number(
+                car.price_cny
+              ).toLocaleString(
+                "ru-RU"
+              )} ¥
 
-            <h2>
-              Описание автомобиля
-            </h2>
-
-            <p>
-              {car.description_ru}
             </p>
 
-          </section>
+          )}
 
-        )}
+          <button
+            className="buy-button"
+            type="button"
+            onClick={() => {
+              alert(
+                "Оставьте заявку, и мы свяжемся с вами."
+              );
+            }}
+          >
+            Оставить заявку
+          </button>
 
-      </div>
+        </aside>
+
+      </section>
 
     </main>
   );
