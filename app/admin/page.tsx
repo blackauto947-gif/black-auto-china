@@ -1,34 +1,7 @@
-"use client";
-
 import Link from "next/link";
-import { useState } from "react";
-import { cars, formatPrice } from "../../../lib/cars";
+import { cars, formatPrice } from "../../lib/cars";
 
-type Props = {
-  params: {
-    id: string;
-  };
-};
-
-export default function CarPage({ params }: Props) {
-  const car = cars.find((item) => item.id === params.id);
-
-  const [activeImage, setActiveImage] = useState(0);
-
-  if (!car) {
-    return (
-      <main className="not-found-page">
-        <div className="container">
-          <h1>Автомобиль не найден</h1>
-
-          <Link href="/car" className="button button-primary">
-            ← Вернуться в каталог
-          </Link>
-        </div>
-      </main>
-    );
-  }
-
+export default function AdminPage() {
   return (
     <main>
       <header className="header">
@@ -38,123 +11,70 @@ export default function CarPage({ params }: Props) {
           </Link>
 
           <nav className="nav">
+            <Link href="/">Главная</Link>
             <Link href="/car">Каталог</Link>
-            <Link href="/admin">Админ-панель</Link>
           </nav>
         </div>
       </header>
 
-      <section className="car-page">
+      <section className="admin-page">
         <div className="container">
-          <Link href="/car" className="back-link">
-            ← Вернуться в каталог
-          </Link>
+          <span className="eyebrow">
+            УПРАВЛЕНИЕ КАТАЛОГОМ
+          </span>
 
-          <div className="car-page-title">
-            <div>
-              <span className="eyebrow">
-                {car.brand.toUpperCase()}
-              </span>
+          <h1>Админ-панель</h1>
 
-              <h1>{car.name}</h1>
-
-              <p>
-                {car.year} · {car.mileage}
-              </p>
+          <div className="admin-stats">
+            <div className="stat-card">
+              <span>Автомобилей</span>
+              <strong>{cars.length}</strong>
             </div>
 
-            <div className="car-page-price">
-              {formatPrice(car.price)}
+            <div className="stat-card">
+              <span>Статус</span>
+              <strong>Активен</strong>
+            </div>
+
+            <div className="stat-card">
+              <span>Каталог</span>
+              <strong>Online</strong>
             </div>
           </div>
 
-          <div className="car-layout">
-            <div className="gallery">
-              <div className="main-image">
-                <img
-                  src={car.images[activeImage]}
-                  alt={car.name}
-                />
+          <div className="admin-list">
+            <h2>Автомобили</h2>
 
-                <div className="image-counter">
-                  {activeImage + 1} / {car.images.length}
-                </div>
-              </div>
+            {cars.map((car) => (
+              <div className="admin-car" key={car.id}>
+                <div className="admin-car-info">
+                  <img
+                    src={car.images[0]}
+                    alt={car.name}
+                  />
 
-              <div className="thumbnails">
-                {car.images.map((image, index) => (
-                  <button
-                    key={image}
-                    type="button"
-                    className={
-                      index === activeImage
-                        ? "thumbnail active"
-                        : "thumbnail"
-                    }
-                    onClick={() => setActiveImage(index)}
-                  >
-                    <img
-                      src={image}
-                      alt={`${car.name} фото ${index + 1}`}
-                    />
-                  </button>
-                ))}
-              </div>
-            </div>
+                  <div>
+                    <h3>{car.name}</h3>
 
-            <aside className="order-card">
-              <span className="eyebrow">
-                АВТОМОБИЛЬ ПОД ЗАКАЗ
-              </span>
-
-              <h2>{car.name}</h2>
-
-              <div className="order-price">
-                {formatPrice(car.price)}
-              </div>
-
-              <p>
-                Оставьте заявку, и мы свяжемся
-                с вами для уточнения всех деталей.
-              </p>
-
-              <Link href="/login" className="button button-primary full-button">
-                Оставить заявку
-              </Link>
-            </aside>
-          </div>
-
-          <section className="car-details">
-            <div className="description-block">
-              <span className="eyebrow">
-                ОБ АВТОМОБИЛЕ
-              </span>
-
-              <h2>Описание</h2>
-
-              <p>{car.description}</p>
-            </div>
-
-            <div className="characteristics-block">
-              <span className="eyebrow">
-                ТЕХНИЧЕСКИЕ ДАННЫЕ
-              </span>
-
-              <h2>Характеристики</h2>
-
-              <div className="characteristics-grid">
-                {car.characteristics.map((item) => (
-                  <div
-                    className="characteristic"
-                    key={item.label}
-                  >
-                    <span>{item.label}</span>
-                    <strong>{item.value}</strong>
+                    <p>
+                      {car.year} · {car.mileage}
+                    </p>
                   </div>
-                ))}
+                </div>
+
+                <strong>
+                  {formatPrice(car.price)}
+                </strong>
+
+                <Link
+                  href={`/car/${car.id}`}
+                  className="details-link"
+                >
+                  Открыть →
+                </Link>
               </div>
-            </div>
-          </section>
+            ))}
+          </div>
         </div>
       </section>
     </main>
